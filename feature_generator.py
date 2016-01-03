@@ -33,7 +33,7 @@ def GetCategoricalVariables(maxCategories, dfTrain, dfTest):
             
     return categoricalVariables
 
-def GetFeatures(dfTrain, dfTest):
+def GetFeatures(dfTrain, dfTest, maxCategories):
 
     dummyVariables = list()
     dummyVariables += ['Medical_Keyword_' + str(i) for i in range(1, 49)]
@@ -84,6 +84,6 @@ def GetFeatures(dfTrain, dfTest):
         else:
             discreteVariables.append(var)    
 	    
-    categoricalVariables = GetCategoricalVariables(10, dfTrain, dfTest)
+    categoricalVariables = GetCategoricalVariables(maxCategories, dfTrain, dfTest)
     
     return continuousVariables + discreteVariables + categoricalVariables + dummyVariables
