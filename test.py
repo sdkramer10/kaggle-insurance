@@ -33,9 +33,7 @@ def histogram(ratings, min_rating=None, max_rating=None):
     return hist_ratings
 
 
-def quadratic_weighted_kappa(rater_a, rater_b):
-    min_rating = None
-    max_rating = None
+def quadratic_weighted_kappa(rater_a, rater_b, min_rating=None, max_rating=None):
     """
     Calculates the quadratic weighted kappa
     quadratic_weighted_kappa calculates the quadratic weighted kappa
