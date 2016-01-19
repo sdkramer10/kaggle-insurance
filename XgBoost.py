@@ -1,30 +1,33 @@
+import numpy as np
 import xgboost as xgb
 import quadratic_weighted_kappa
 import numpy as np
+from scipy import optimize
+from CutPoints import CutPointOptimizer
 
 class XGBoostModel:
     
     def __init__(self, num_rounds, max_depth, eta, colsample_bytree, objective,  silent=True):
         self.param = {'max_depth':max_depth, 'eta': eta, 'silent':1, 'min_child_weight':3, 'subsample' : 0.7 ,"early_stopping_rounds":10, 
             'objective': objective, 'colsample_bytree': colsample_bytree, "silent" : silent}
-     #   self.learning_rates = learning_rates
+        #self.learning_rates = learning_rates
         self.num_round=num_rounds
 
-    #def __init__(self, eta, l, alpha, rounds):
-     #   self.param = {'objective': 'reg:linear'}
+#    def __init__(self, eta, l, alpha, rounds):
+ #        self.param = {'objective': 'reg:linear', "early_stopping_rounds":5}
 #, 'num_class': 8}
-     #   self.param['booster'] = 'gblinear' # gbtree has more params to tune...
-      #  self.param['eta'] = eta
-       # self.param['lambda'] = l
-        #self.param['alpha'] = alpha       
-        #self.num_round=rounds
-    
+  #       self.param['booster'] = 'gblinear' # gbtree has more params to tune...
+   #      self.param['eta'] = eta
+    #     self.param['lambda'] = l
+     #    self.param['alpha'] = alpha       
+      #   self.num_round=rounds
+       #  self.cutPoints = np.array([1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5])
         
     def fit(self, xTrain, yTrain):
         dtrain = xgb.DMatrix(xTrain,label=yTrain)
         watchlist  = [(dtrain,'train')]
-        self.bst = xgb.train(self.param, dtrain, self.num_round, watchlist)
-#, obj=softkappaobj, feval=evalerror)
+        self.bst = xgb.train(self.param, dtrain, self.num_round, watchlist, feval=self.qwkerror)
+#feval=evalerror)
         
     def predict(self, testData):
         dTest = xgb.DMatrix(testData)
@@ -32,10 +35,14 @@ class XGBoostModel:
     #    preds = softmax(self.bst.predict(dTest))
      #   return np.argmax(preds, axis=1) + 1
 
+    def qwkerror(self, preds, dtrain):
+        labels = dtrain.get_label()
+        kappa = quadratic_weighted_kappa.quadratic_weighted_kappa(labels, preds)
+        return 'kappa', -1 * kappa
+
 def softmax(score):
     score = np.asarray(score, dtype=float)
     score = np.exp(score-np.max(score))
-   # print "SHAPE IS %s" % score.shape
     score /= np.sum(score, axis=1)[:,np.newaxis]
     return score
 
@@ -102,7 +109,8 @@ def softkappaobj(preds, dtrain):
     hess *= -1.
     # this pure hess doesn't work in my case, but the following works ok
     # use a const
-    #hess = 0.000125 * np.ones(grad.shape, dtype=float)
+  #  grad = pred_labels - labels
+   # hess = 0.0125 * np.ones(grad.shape, dtype=float)
     # or use the following...
     scale = 0.000125 / np.mean(abs(hess))
     hess *= scale
@@ -121,7 +129,15 @@ def evalerror(preds, dtrain):
     preds = softmax(preds)
     ## decoding (naive argmax decoding)
     pred_labels = np.argmax(preds, axis=1) + 1
-    ## compute quadratic weighted kappa (using implementation from @Ben Hamner
-    ## https://github.com/benhamner/Metrics/blob/master/Python/ml_metrics/quadratic_weighted_kappa.py
+    print np.amax(preds, axis=1)
     kappa = quadratic_weighted_kappa.quadratic_weighted_kappa(labels, pred_labels)
     return 'kappa',  kappa
+
+def qwkerror(preds, dtrain):
+    labels = dtrain.get_label()
+    #cpo = CutPointOptimizer(preds, labels)
+    #initialCutPoints = np.array([1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5])
+    #cutPoints = optimize.fmin(cpo.qwk, initialCutPoints)
+    #preds = np.searchsorted(cutPoints, preds) + 1   
+    kappa = quadratic_weighted_kappa.quadratic_weighted_kappa(labels, preds)
+    return 'kappa', -1 * kappa
