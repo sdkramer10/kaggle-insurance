@@ -7,8 +7,8 @@ from CutPoints import CutPointOptimizer
 
 class XGBoostModel:
     
-    def __init__(self, num_rounds, max_depth, eta, colsample_bytree, objective,  silent=True):
-        self.param = {'max_depth':max_depth, 'eta': eta, 'silent':1, 'min_child_weight':3, 'subsample' : 0.7 ,"early_stopping_rounds":10, 
+    def __init__(self, num_rounds, max_depth, eta, colsample_bytree, objective, min_child_weight, silent=True):
+        self.param = {'max_depth':max_depth, 'eta': eta, 'silent':1, 'min_child_weight':min_child_weight, 'subsample' : 0.7 ,"early_stopping_rounds":10, 
             'objective': objective, 'colsample_bytree': colsample_bytree, "silent" : silent}
         #self.learning_rates = learning_rates
         self.num_round=num_rounds
