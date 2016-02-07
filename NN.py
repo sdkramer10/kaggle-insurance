@@ -2,12 +2,57 @@ from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation
 from keras.optimizers import Adadelta
 from keras.layers.normalization import BatchNormalization
+from sklearn.cross_validation import train_test_split
+from keras.callbacks import Callback
+import numpy as np
+import quadratic_weighted_kappa
+from keras.layers.advanced_activations import PReLU
+
+class clsvalidation_kappa(Callback):  #inherits from Callback
+    
+    def __init__(self, filepath, cutPoints, validation_data=(), patience=5):
+        super(Callback, self).__init__()
+
+        self.patience = patience
+        self.X_val, self.y_val = validation_data  #tuple of validation X and y
+        self.best = 0.0
+        self.wait = 0  #counter for patience
+        self.filepath=filepath
+        self.best_rounds =1
+        self.counter=0
+        self.cutPoints = cutPoints
+
+    def on_epoch_end(self, epoch, logs={}):
+        
+        self.counter +=1
+        p = self.model.predict(self.X_val, verbose=0) #score the validation data 
+        
+        p = np.searchsorted(self.cutPoints, p) + 1   
+        current = quadratic_weighted_kappa.quadratic_weighted_kappa(self.y_val.values.ravel(), p)       
+
+        print('Epoch %d Kappa: %f | Best Kappa: %f \n' % (epoch,current,self.best))
+    
+    
+        #if improvement over best....
+        if current > self.best:
+            self.best = current
+            self.best_rounds=self.counter
+            self.wait = 0
+            self.model.save_weights(self.filepath, overwrite=True)
+        else:
+            if self.wait >= self.patience: #no more patience, retrieve best model
+                self.model.stop_training = True
+                print('Best number of rounds: %d \nKappa: %f \n' % (self.best_rounds, self.best))
+                
+                self.model.load_weights(self.filepath)
+                           
+            self.wait += 1 #incremental the number of times without improvement
 
 class NN:
     #I made a small wrapper for the Keras model to make it more scikit-learn like
     #I think they have something like this built in already, oh well
     #See http://keras.io/ for parameter options
-    def __init__(self, inputShape, layers, dropout = [], activation = 'relu', init = 'uniform', loss = 'rmse', optimizer = 'adadelta', nb_epochs = 50, batch_size = 32, verbose = 1):
+    def __init__(self, inputShape, cutPointArray, layers, dropout = [], activation = 'relu', patience=5, init = 'uniform', loss = 'rmse', optimizer = 'adadelta', nb_epochs = 50, batch_size = 32, verbose = 1):
 
         model = Sequential()
         for i in range(len(layers)):
@@ -18,8 +63,9 @@ class NN:
             else:
                 print ("Adding Layer " + str(i) + ": " + str(layers[i]))
                 model.add(Dense(layers[i], init = init))
-            print ("Adding " + activation + " layer")
-            model.add(Activation(activation))
+            #print ("Adding " + activation + " layer")
+            #model.add(Activation(activation))
+            model.add(PReLU())
             model.add(BatchNormalization())
             if len(dropout) > i:
                 print ("Adding " + str(dropout[i]) + " dropout")
@@ -31,9 +77,13 @@ class NN:
         self.nb_epochs = nb_epochs
         self.batch_size = batch_size
         self.verbose = verbose
+        self.patience = patience
+        self.cutPointArray = cutPointArray
 
-    def fit(self, X, y): 
-        self.model.fit(X, y, nb_epoch=self.nb_epochs, batch_size=self.batch_size, verbose = self.verbose)
+    def fit(self, X, y, fold): 
+        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.20)
+        val_call = clsvalidation_kappa(cutPoints=self.cutPointArray[fold,:], validation_data=(X_val, y_val), patience=self.patience, filepath='../input/best.h5') 
+        self.model.fit(X_train, y_train, nb_epoch=self.nb_epochs, batch_size=self.batch_size, verbose = self.verbose, callbacks=[val_call])
         
     def predict(self, X, batch_size = 128, verbose = 1):
-        return self.model.predict(X, batch_size = batch_size, verbose = verbose)
+        return self.model.predict(X, batch_size = batch_size, verbose = verbose)[:,0]
