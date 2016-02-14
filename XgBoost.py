@@ -4,14 +4,25 @@ import quadratic_weighted_kappa
 import numpy as np
 from scipy import optimize
 from CutPoints import CutPointOptimizer
+from sklearn.cross_validation import train_test_split
 
 class XGBoostModel:
     
-    def __init__(self, num_rounds, max_depth, eta, colsample_bytree, objective, min_child_weight, silent=True):
-        self.param = {'max_depth':max_depth, 'eta': eta, 'silent':1, 'min_child_weight':min_child_weight, 'subsample' : 0.7 ,"early_stopping_rounds":10, 
-            'objective': objective, 'colsample_bytree': colsample_bytree, "silent" : silent}
+    def __init__(self, num_rounds, max_depth, eta, colsample_bytree, min_child_weight, silent=True):
+        self.param = {'max_depth':max_depth, 'eta': eta, 'silent':1, 'min_child_weight':min_child_weight, 'subsample' : 0.7,
+              'colsample_bytree': colsample_bytree, "silent" : silent}
         #self.learning_rates = learning_rates
         self.num_round=num_rounds
+        self.cpa = np.ndarray((7, 7))
+        self.cpa[0,:] = [2.68237582,  3.38457017,  4.26592497,  4.89213188,  5.59007684,  6.30401051, 6.86168173]
+        self.cpa[1,:] = [ 1.83758628,  3.28546717,  4.30051656,  5.00993717,  5.54911030,  6.2537504, 6.93040581]
+        self.cpa[2,:] = [ 2.19477416,  3.28905817,  4.27904599,  4.90782139,  5.67257616,  6.16319723, 6.86728276]
+        self.cpa[3,:] = [ 1.68366001,  3.45431677,  4.20001421,  4.93482508,  5.54030709,  6.25156745, 6.88775039]
+        self.cpa[4,:] = [ 1.61531459,  3.08294951,  4.39483963,  4.73639875,  5.48588959,  6.20398412, 6.73928103]
+        self.cpa[5,:] = [ 1.96627584,  3.54029862,  4.13203389,  4.80030722,  5.5207599,   6.25109169, 6.85618128]
+        self.cpa[6,:] = [ 1.66802702,  3.46534344,  3.89126679,  4.81654785,  5.35745692,  6.28049139, 6.89256955]
+        self.cutPoints = [ 1.91843059,  3.29717288,  4.208207060,  4.86836428,  5.46248675,  6.2095608, 6.86633969]
+
 
 #    def __init__(self, eta, l, alpha, rounds):
  #        self.param = {'objective': 'reg:linear', "early_stopping_rounds":5}
@@ -23,121 +34,39 @@ class XGBoostModel:
       #   self.num_round=rounds
        #  self.cutPoints = np.array([1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5])
         
-    def fit(self, xTrain, yTrain):
-        dtrain = xgb.DMatrix(xTrain,label=yTrain)
-        watchlist  = [(dtrain,'train')]
-        self.bst = xgb.train(self.param, dtrain, self.num_round, watchlist, feval=self.qwkerror)
-#feval=evalerror)
+    def fit(self, xTrain, yTrain, fold):
+        #self.cutPoints = self.cpa[fold,:]
+        X_train, X_test, y_train, y_test = train_test_split(xTrain, yTrain, test_size=0.12, random_state=107)
+        #dtrain = xgb.DMatrix(xTrain,label=yTrain)
+        xgtrain = xgb.DMatrix(X_train, label=y_train)
+        xgval=xgb.DMatrix(X_test,label=y_test)        
+        watchlist  = [(xgtrain,'train'),(xgval, 'val')]
+        self.bst = xgb.train(self.param, xgtrain, self.num_round, watchlist, obj=kapparegobj, feval=kappaerror, early_stopping_rounds=50)
         
     def predict(self, testData):
         dTest = xgb.DMatrix(testData)
-        return self.bst.predict(dTest)
-    #    preds = softmax(self.bst.predict(dTest))
-     #   return np.argmax(preds, axis=1) + 1
+        predictions =  self.bst.predict(dTest, ntree_limit=self.bst.best_ntree_limit)
+        return -1.07077748492 + 1.12606628 * predictions
 
     def qwkerror(self, preds, dtrain):
         labels = dtrain.get_label()
+        preds = -1.07077748492 + 1.12606628 * preds
+        preds = np.searchsorted(self.cutPoints, preds) + 1   
         kappa = quadratic_weighted_kappa.quadratic_weighted_kappa(labels, preds)
         return 'kappa', -1 * kappa
 
-def softmax(score):
-    score = np.asarray(score, dtype=float)
-    score = np.exp(score-np.max(score))
-    score /= np.sum(score, axis=1)[:,np.newaxis]
-    return score
-
-## soft version of kappa score using the class probability
-## inspired by @George Mohler in the Higgs competition
-## https://www.kaggle.com/c/higgs-boson/forums/t/10286/customize-loss-function-in-xgboost/53459#post53459
-## NOTE: As also discussed in the above link, it is hard to tune the hessian to get it to work.
-def softkappaobj(preds, dtrain):
-    ## label are in [0,1,2,3] as required by XGBoost for multi-classification
-    labels = dtrain.get_label() + 1
-    labels = np.asarray(labels, dtype=int)
-    preds = softmax(preds)
-    M = preds.shape[0]
-    N = preds.shape[1]
-
-    ## compute O (enumerator)
-    O = 0.0
-    for j in range(N):
-        wj = (labels - (j+1.))**2
-        O += np.sum(wj * preds[:,j])
-    
-    ## compute E (denominator)
-    hist_label = np.bincount(labels)[1:]
-    hist_pred = np.sum(preds, axis=0)
-    E = 0.0
-    for i in range(N):
-        for j in range(N):
-            E += pow(i - j, 2.0) * hist_label[i] * hist_pred[j]
-
-    ## compute gradient and hessian
-    grad = np.zeros((M, N))
-    hess = np.zeros((M, N))
-    for n in range(N):
-        ## first-order derivative: dO / dy_mn
-        dO = np.zeros((M))
-        for j in range(N):
-            indicator = float(n == j)
-            dO += ((labels - (j+1.))**2) * preds[:,n] * (indicator - preds[:,j])
-        ## first-order derivative: dE / dy_mn
-        dE = np.zeros((M))
-        for k in range(N):
-            for l in range(N):
-                indicator = float(n == k)
-                dE += pow(k-l, 2.0) * hist_label[l] * preds[:,n] * (indicator - preds[:,k])
-        ## the grad
-        grad[:,n] = -M * (dO * E - O * dE) / (E**2)
-        
-        ## second-order derivative: d^2O / d (y_mn)^2
-        d2O = np.zeros((M))
-        for j in range(N):
-            indicator = float(n == j)
-            d2O += ((labels - (j+1.))**2) * preds[:,n] * (1 - 2.*preds[:,n]) * (indicator - preds[:,j])
-       
-        ## second-order derivative: d^2E / d (y_mn)^2
-        d2E = np.zeros((M))
-        for k in range(N):
-            for l in range(N):
-                indicator = float(n == k)
-                d2E += pow(k-l, 2.0) * hist_label[l] * preds[:,n] * (1 - 2.*preds[:,n]) * (indicator - preds[:,k])
-        ## the hess
-        hess[:,n] = -M * ((d2O * E - O * d2E)*(E**2) - (dO * E - O * dE) * 2. * E * dE) / (E**4)
-
-    grad *= -1.
-    hess *= -1.
-    # this pure hess doesn't work in my case, but the following works ok
-    # use a const
-  #  grad = pred_labels - labels
-   # hess = 0.0125 * np.ones(grad.shape, dtype=float)
-    # or use the following...
-    scale = 0.000125 / np.mean(abs(hess))
-    hess *= scale
-    hess = np.abs(hess) # It works!! no idea...
-    grad.shape = (M*N)
-    hess.shape = (M*N)
+def kapparegobj(preds, dtrain):
+    labels = dtrain.get_label()
+    preds = -1.07077748492 + 1.12606628 * preds
+    x = (preds - labels)
+    grad = 2*x*np.exp(-(x**2))*(np.exp(x**2)+x**2+1)
+    hess = 2*np.exp(-(x**2))*(np.exp(x**2)-2*(x**4)+5*(x**2)-1)
     return grad, hess
 
-# evalerror is your customized evaluation function to 
-# 1) decode the class probability 
-# 2) compute quadratic weighted kappa
-def evalerror(preds, dtrain):
-    ## label are in [0,1,2,3] as required by XGBoost for multi-classification
-    labels = dtrain.get_label() + 1
-    ## class probability
-    preds = softmax(preds)
-    ## decoding (naive argmax decoding)
-    pred_labels = np.argmax(preds, axis=1) + 1
-    print np.amax(preds, axis=1)
-    kappa = quadratic_weighted_kappa.quadratic_weighted_kappa(labels, pred_labels)
-    return 'kappa',  kappa
 
-def qwkerror(preds, dtrain):
+def kappaerror(preds, dtrain):
     labels = dtrain.get_label()
-    #cpo = CutPointOptimizer(preds, labels)
-    #initialCutPoints = np.array([1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5])
-    #cutPoints = optimize.fmin(cpo.qwk, initialCutPoints)
-    #preds = np.searchsorted(cutPoints, preds) + 1   
-    kappa = quadratic_weighted_kappa.quadratic_weighted_kappa(labels, preds)
-    return 'kappa', -1 * kappa
+    preds = -0.514476838741 + 1.05951888 * preds
+    x = (labels-preds)
+    error = (x**2)*(1-np.exp(-(x**2)))
+    return 'error', np.mean(error)

@@ -1,3 +1,5 @@
+from scipy import optimize
+from CutPoints import CutPointOptimizer
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation
 from keras.optimizers import Adadelta
@@ -7,24 +9,35 @@ from keras.callbacks import Callback
 import numpy as np
 import quadratic_weighted_kappa
 from keras.layers.advanced_activations import PReLU
+import theano
+import theano.tensor as T
+
+def rounded_mean_absolute_error(y_true, y_pred):
+    rounded = T.round(y_pred)
+    return T.mean(T.abs_(rounded - y_true), axis=-1)
 
 class clsvalidation_kappa(Callback):  #inherits from Callback
     
-    def __init__(self, filepath, cutPoints, validation_data=(), patience=5):
+    def __init__(self, filepath, train_data=(), validation_data=(), patience=5):
         super(Callback, self).__init__()
 
         self.patience = patience
-        self.X_val, self.y_val = validation_data  #tuple of validation X and y
+        self.X_val, self.y_val = validation_data 
+        self.X_train, self.Y_train = train_data
         self.best = 0.0
         self.wait = 0  #counter for patience
         self.filepath=filepath
         self.best_rounds =1
         self.counter=0
-        self.cutPoints = cutPoints
-
+        self.cutPoints = np.array([1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5])
+    
     def on_epoch_end(self, epoch, logs={}):
         
         self.counter +=1
+        train_predictions = self.model.predict(self.X_train, verbose=0)
+        cpo = CutPointOptimizer(train_predictions, self.Y_train)
+        self.cutPoints = optimize.fmin(cpo.qwk, self.cutPoints)
+        
         p = self.model.predict(self.X_val, verbose=0) #score the validation data 
         
         p = np.searchsorted(self.cutPoints, p) + 1   
@@ -72,7 +85,8 @@ class NN:
                 model.add(Dropout(dropout[i]))
         model.add(Dense(1, init = init)) #End in a single output node for regression style output
         model.compile(loss=loss, optimizer=optimizer)
-        
+        self.optimizer = optimizer
+        self.loss = loss    
         self.model = model
         self.nb_epochs = nb_epochs
         self.batch_size = batch_size
@@ -80,10 +94,12 @@ class NN:
         self.patience = patience
         self.cutPointArray = cutPointArray
 
-    def fit(self, X, y, fold): 
+    def fit(self, X, y): 
         X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.20)
-        val_call = clsvalidation_kappa(cutPoints=self.cutPointArray[fold,:], validation_data=(X_val, y_val), patience=self.patience, filepath='../input/best.h5') 
+        cutPoints = np.median(self.cutPointArray, axis=0)
+        val_call = clsvalidation_kappa(train_data=(X_train, y_train), validation_data=(X_val, y_val), patience=self.patience, filepath='../input/best.h5') 
         self.model.fit(X_train, y_train, nb_epoch=self.nb_epochs, batch_size=self.batch_size, verbose = self.verbose, callbacks=[val_call])
         
     def predict(self, X, batch_size = 128, verbose = 1):
         return self.model.predict(X, batch_size = batch_size, verbose = verbose)[:,0]
+

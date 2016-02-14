@@ -45,7 +45,7 @@ def GetFeatures(dfTrain, dfTest, maxCategories, useNormalization):
     dummyVariables = list()
     dummyVariables += ['Medical_Keyword_' + str(i) for i in range(1, 49)]
 
-    originalVariables = ['Product_Info_4', 'Ins_Age', 'Ht', 'Wt', 'BMI', 'Employment_Info_1', 'Employment_Info_4', 'Employment_Info_6', 'Insurance_History_5', 'Family_Hist_2', 'Family_Hist_3', 'Family_Hist_4', 'Family_Hist_5']
+    originalVariables = ['WeightToGain', 'HeightToGain', 'Product_Info_4', 'Ins_Age', 'Ht', 'Wt', 'BMI', 'Employment_Info_1', 'Employment_Info_4', 'Employment_Info_6', 'Insurance_History_5', 'Family_Hist_2', 'Family_Hist_3', 'Family_Hist_4', 'Family_Hist_5']
     continuousVariables = list()
     for var in originalVariables:
         if dfTrain[var].isnull().sum():
@@ -67,7 +67,7 @@ def GetFeatures(dfTrain, dfTest, maxCategories, useNormalization):
 	else:
             continuousVariables.append(var)
 
-    originalVariables = ['Good_Medical_Keyword_Total', 'Medical_History_1', 'Medical_History_15', 'Medical_History_24', 'Medical_History_32']
+    originalVariables = ['NanSum', 'Good_Medical_Keyword_Total', 'Medical_History_1', 'Medical_History_15', 'Medical_History_24', 'Medical_History_32']
     discreteVariables = list()
     for var in originalVariables:
         if dfTrain[var].isnull().sum():
