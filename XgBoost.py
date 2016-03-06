@@ -36,28 +36,26 @@ class XGBoostModel:
         
     def fit(self, xTrain, yTrain, fold):
         #self.cutPoints = self.cpa[fold,:]
-        X_train, X_test, y_train, y_test = train_test_split(xTrain, yTrain, test_size=0.12, random_state=107)
-        #dtrain = xgb.DMatrix(xTrain,label=yTrain)
-        xgtrain = xgb.DMatrix(X_train, label=y_train)
-        xgval=xgb.DMatrix(X_test,label=y_test)        
-        watchlist  = [(xgtrain,'train'),(xgval, 'val')]
-        self.bst = xgb.train(self.param, xgtrain, self.num_round, watchlist, obj=kapparegobj, feval=kappaerror, early_stopping_rounds=50)
+        #X_train, X_test, y_train, y_test = train_test_split(xTrain, yTrain, test_size=0.12, random_state=107)
+        dtrain = xgb.DMatrix(xTrain,label=yTrain)
+        #xgtrain = xgb.DMatrix(X_train, label=y_train)
+        #xgval=xgb.DMatrix(X_test,label=y_test)        
+        watchlist  = [(dtrain,'train')]
+        self.bst = xgb.train(self.param, dtrain, self.num_round, watchlist, obj=kapparegobj, feval=self.qwkerror)
         
     def predict(self, testData):
         dTest = xgb.DMatrix(testData)
         predictions =  self.bst.predict(dTest, ntree_limit=self.bst.best_ntree_limit)
-        return -1.07077748492 + 1.12606628 * predictions
+        return -0.514476838741 + 1.05951888 * predictions
 
     def qwkerror(self, preds, dtrain):
         labels = dtrain.get_label()
-        preds = -1.07077748492 + 1.12606628 * preds
         preds = np.searchsorted(self.cutPoints, preds) + 1   
         kappa = quadratic_weighted_kappa.quadratic_weighted_kappa(labels, preds)
         return 'kappa', -1 * kappa
 
 def kapparegobj(preds, dtrain):
     labels = dtrain.get_label()
-    preds = -1.07077748492 + 1.12606628 * preds
     x = (preds - labels)
     grad = 2*x*np.exp(-(x**2))*(np.exp(x**2)+x**2+1)
     hess = 2*np.exp(-(x**2))*(np.exp(x**2)-2*(x**4)+5*(x**2)-1)
@@ -66,7 +64,6 @@ def kapparegobj(preds, dtrain):
 
 def kappaerror(preds, dtrain):
     labels = dtrain.get_label()
-    preds = -0.514476838741 + 1.05951888 * preds
     x = (labels-preds)
     error = (x**2)*(1-np.exp(-(x**2)))
     return 'error', np.mean(error)

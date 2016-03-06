@@ -2,7 +2,7 @@ import pandas as pd
 
 def GetCategoricalVariables(maxCategories, dfTrain, dfTest):
 
-    originalVariables = ['Product_Info_1', 'Product_Info_2', 'Product_Info_3', 'Product_Info_5', 'Product_Info_6', 'Product_Info_7'
+    originalVariables = ['Product_Info_2', 'Product_Info_1', 'Product_Info_3', 'Product_Info_5', 'Product_Info_6', 'Product_Info_7'
                      , 'Employment_Info_2', 'Employment_Info_3', 'Employment_Info_5', 'InsuredInfo_1', 'InsuredInfo_2'
                      , 'InsuredInfo_3', 'InsuredInfo_4', 'InsuredInfo_5', 'InsuredInfo_6', 'InsuredInfo_7'
                      , 'Insurance_History_1', 'Insurance_History_2', 'Insurance_History_3', 'Insurance_History_4' 
@@ -45,7 +45,7 @@ def GetFeatures(dfTrain, dfTest, maxCategories, useNormalization):
     dummyVariables = list()
     dummyVariables += ['Medical_Keyword_' + str(i) for i in range(1, 49)]
 
-    originalVariables = ['WeightToGain', 'HeightToGain', 'Product_Info_4', 'Ins_Age', 'Ht', 'Wt', 'BMI', 'Employment_Info_1', 'Employment_Info_4', 'Employment_Info_6', 'Insurance_History_5', 'Family_Hist_2', 'Family_Hist_3', 'Family_Hist_4', 'Family_Hist_5']
+    originalVariables = ['Age_BMI', 'WeightToGain', 'HeightToGain', 'Product_Info_4', 'Ins_Age', 'Ht', 'Wt', 'BMI', 'Employment_Info_1', 'Employment_Info_4', 'Employment_Info_6', 'Insurance_History_5', 'Family_Hist_2', 'Family_Hist_3', 'Family_Hist_4', 'Family_Hist_5']
     continuousVariables = list()
     for var in originalVariables:
         if dfTrain[var].isnull().sum():
