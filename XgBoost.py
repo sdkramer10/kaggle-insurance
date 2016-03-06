@@ -11,7 +11,6 @@ class XGBoostModel:
     def __init__(self, num_rounds, max_depth, eta, colsample_bytree, min_child_weight, silent=True):
         self.param = {'max_depth':max_depth, 'eta': eta, 'silent':1, 'min_child_weight':min_child_weight, 'subsample' : 0.7,
               'colsample_bytree': colsample_bytree, "silent" : silent}
-        #self.learning_rates = learning_rates
         self.num_round=num_rounds
         self.cpa = np.ndarray((7, 7))
         self.cpa[0,:] = [2.68237582,  3.38457017,  4.26592497,  4.89213188,  5.59007684,  6.30401051, 6.86168173]
@@ -22,17 +21,6 @@ class XGBoostModel:
         self.cpa[5,:] = [ 1.96627584,  3.54029862,  4.13203389,  4.80030722,  5.5207599,   6.25109169, 6.85618128]
         self.cpa[6,:] = [ 1.66802702,  3.46534344,  3.89126679,  4.81654785,  5.35745692,  6.28049139, 6.89256955]
         self.cutPoints = [ 1.91843059,  3.29717288,  4.208207060,  4.86836428,  5.46248675,  6.2095608, 6.86633969]
-
-
-#    def __init__(self, eta, l, alpha, rounds):
- #        self.param = {'objective': 'reg:linear', "early_stopping_rounds":5}
-#, 'num_class': 8}
-  #       self.param['booster'] = 'gblinear' # gbtree has more params to tune...
-   #      self.param['eta'] = eta
-    #     self.param['lambda'] = l
-     #    self.param['alpha'] = alpha       
-      #   self.num_round=rounds
-       #  self.cutPoints = np.array([1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5])
         
     def fit(self, xTrain, yTrain, fold):
         #self.cutPoints = self.cpa[fold,:]
@@ -50,17 +38,18 @@ class XGBoostModel:
 
     def qwkerror(self, preds, dtrain):
         labels = dtrain.get_label()
-        preds = np.searchsorted(self.cutPoints, preds) + 1   
+        preds = np.searchsorted(self.cutPoints, preds) + 1 
         kappa = quadratic_weighted_kappa.quadratic_weighted_kappa(labels, preds)
         return 'kappa', -1 * kappa
 
+# custom cost function - similar to rmse, but take into account the fact the closer a prediction is to the truth,
+# the more likely it is that the cut points will cause it to get rounded to the correct truth value
 def kapparegobj(preds, dtrain):
     labels = dtrain.get_label()
     x = (preds - labels)
     grad = 2*x*np.exp(-(x**2))*(np.exp(x**2)+x**2+1)
     hess = 2*np.exp(-(x**2))*(np.exp(x**2)-2*(x**4)+5*(x**2)-1)
     return grad, hess
-
 
 def kappaerror(preds, dtrain):
     labels = dtrain.get_label()

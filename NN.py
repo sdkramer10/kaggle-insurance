@@ -76,7 +76,6 @@ class NN:
             else:
                 print ("Adding Layer " + str(i) + ": " + str(layers[i]))
                 model.add(Dense(layers[i], init = init))
-            #print ("Adding " + activation + " layer")
             #model.add(Activation(activation))
             model.add(PReLU())
             model.add(BatchNormalization())
